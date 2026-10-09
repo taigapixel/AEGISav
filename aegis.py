@@ -1,8 +1,3 @@
-# ============================================================
-#   AEGIS CLEANER — антивирус-утилита на Python
-#   Диспетчер задач + сканер + карантин + realtime + VirusTotal
-#   Определение: по расширениям, классам угроз, маскировке, правам процессов
-# ============================================================
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import psutil, os, sys, shutil, json, time, threading, queue, hashlib, requests
@@ -10,9 +5,6 @@ from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-# ============================================================
-#   ПАЛИТРА
-# ============================================================
 BG       = "#0a0a0c"
 SIDEBAR  = "#0e0e11"
 CARD     = "#16161a"
@@ -29,9 +21,6 @@ FONT_B = ("Segoe UI Semibold", 10)
 FONT_H = ("Segoe UI Semibold", 15)
 FONT_T = ("Segoe UI Semibold", 22)
 
-# ============================================================
-#   ПУТИ
-# ============================================================
 AEGIS_DIR      = os.path.join(os.path.expandvars(r'%LOCALAPPDATA%'), 'Aegis')
 QUARANTINE_DIR = os.path.join(AEGIS_DIR, 'quarantine')
 LOG_FILE       = os.path.join(AEGIS_DIR, 'events.log')
@@ -39,18 +28,12 @@ CONFIG_FILE    = os.path.join(AEGIS_DIR, 'config.json')
 VT_CACHE_FILE  = os.path.join(AEGIS_DIR, 'vt_cache.json')
 os.makedirs(QUARANTINE_DIR, exist_ok=True)
 
-# ============================================================
-#   БАЗА ЗНАНИЙ
-# ============================================================
-
-# --- Системные процессы: НИКОГДА не убивать ---
 SYSTEM_PROCS = {'system','registry','memory compression','smss.exe','csrss.exe',
                 'wininit.exe','services.exe','lsass.exe','winlogon.exe',
                 'svchost.exe','dwm.exe','fontdrvhost.exe','ctfmon.exe',
                 'sihost.exe','taskhostw.exe','runtimebroker.exe','explorer.exe',
                 'conhost.exe','searchindexer.exe','spoolsv.exe','audiodg.exe'}
 
-# --- Доверенные процессы: не подсвечивать как подозрительные ---
 TRUSTED_PROCS = SYSTEM_PROCS | {
     'chrome.exe','firefox.exe','msedge.exe','opera.exe','brave.exe',
     'code.exe','devenv.exe','pycharm64.exe','idea64.exe','notepad++.exe',
@@ -61,36 +44,33 @@ TRUSTED_PROCS = SYSTEM_PROCS | {
     'python.exe','pythonw.exe','pip.exe','git.exe','node.exe','npm.exe',
 }
 
-# --- Опасные расширения: по ним Windows исполняет код ---
 DANGEROUS_EXT = {
-    '.scr': 'Экранная заставка (исполняемый код)',
-    '.vbs': 'VBScript — часто используется для заражения',
+    '.scr': 'Экранная заставка',
+    '.vbs': 'VBScript',
     '.vbe': 'Зашифрованный VBScript',
-    '.js':  'JavaScript — может запускать код',
+    '.js':  'JavaScript',
     '.jse': 'Зашифрованный JavaScript',
-    '.wsf': 'Windows Script File — смешанный скрипт',
+    '.wsf': 'Windows Script File',
     '.wsh': 'Windows Script Host',
-    '.hta': 'HTML Application — исполняется как .exe',
+    '.hta': 'HTML Application',
     '.ps1': 'PowerShell-скрипт',
     '.psm1': 'PowerShell-модуль',
     '.bat': 'Пакетный файл',
     '.cmd': 'Командный файл',
-    '.pif': 'Program Information File (старый .exe)',
+    '.pif': 'Program Information File',
     '.com': 'DOS-программа',
     '.jar': 'Java-приложение',
     '.msi': 'Установщик Windows',
-    '.cpl': 'Панель управления (исполняемый)',
+    '.cpl': 'Панель управления',
     '.reg': 'Патч реестра',
-    '.lnk': 'Ярлык (может скрывать запуск)',
+    '.lnk': 'Ярлык',
 }
 
-# --- Расширения-маскировки: photo.jpg.exe / doc.pdf.scr ---
 MASK_EXT = {'.jpg','.jpeg','.png','.gif','.bmp','.webp','.svg',
             '.pdf','.doc','.docx','.xls','.xlsx','.ppt','.pptx',
             '.txt','.rtf','.csv','.mp3','.wav','.flac','.mp4',
             '.avi','.mkv','.mov','.zip','.rar','.7z','.tar','.gz'}
 
-# --- Маркеры угроз (латиница) ---
 THREAT_SIGNATURES = {
     'trojan':    'Trojan',
     'backdoor':  'Backdoor',
@@ -102,7 +82,7 @@ THREAT_SIGNATURES = {
     'stealer':   'Stealer',
     'keylog':    'Keylogger',
     'spy':       'Spyware',
-    'rat':       'RAT (Remote Access Trojan)',
+    'rat':       'RAT',
     'botnet':    'Botnet',
     'bot':       'Bot',
     'adware':    'Adware',
@@ -112,16 +92,15 @@ THREAT_SIGNATURES = {
     'exploit':   'Exploit',
     'phish':     'Phishing',
     'hacktool':  'HackTool',
-    'keygen':    'Keygen (PUA)',
-    'crack':     'Crack (PUA)',
-    'patch':     'Patcher (PUA)',
-    'activator': 'Activator (PUA)',
+    'keygen':    'Keygen',
+    'crack':     'Crack',
+    'patch':     'Patcher',
+    'activator': 'Activator',
     'cheat':     'Game Cheat',
     'malware':   'Malware',
     'virus':     'Virus',
 }
 
-# --- Права процессов: что процесс УМЕЕТ делать ---
 CAPABILITY_PATTERNS = {
     'webcam': [
         'obs', 'obs64', 'obs32', 'xsplit', 'streamlabs',
@@ -157,10 +136,8 @@ CAPABILITY_PATTERNS = {
     ],
 }
 
-# --- Расширения, которые НИКОГДА не кидать в карантин (по умолчанию) ---
 DEFAULT_SAFE_EXT = {'.txt', '.log', '.md', '.ini', '.cfg'}
 
-# --- Папки для сканирования ---
 QUICK_DIRS = [
     os.path.expandvars(r'%TEMP%'),
     os.path.expandvars(r'%USERPROFILE%\Downloads'),
@@ -171,62 +148,41 @@ QUICK_DIRS = [
 ]
 WATCH_DIRS = QUICK_DIRS + [os.path.expandvars(r'%LOCALAPPDATA%\Temp')]
 
-# --- Папки, которые пропускаем при долгом скане ---
 SKIP_DIRS = {'windows','$recycle.bin','system volume information',
              'program files','program files (x86)','appdata','node_modules',
              '.git','$windows.~bt','$windows.~ws'}
 
-# --- Папки автозагрузки ---
 STARTUP_DIRS = [
     os.path.expandvars(r'%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup'),
     os.path.expandvars(r'%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs\Startup'),
 ]
 
 
-# ============================================================
-#   АНАЛИЗ ФАЙЛОВ И ПРОЦЕССОВ
-# ============================================================
 def analyze_file(path):
-    """
-    Проверяет файл по трём признакам:
-    1) опасное расширение
-    2) маркер угрозы в имени
-    3) скрытое двойное расширение (photo.jpg.exe)
-    Возвращает строку-причину или None.
-    """
     if not path or not os.path.isfile(path):
         return None
     name = os.path.basename(path).lower()
     ext  = os.path.splitext(name)[1]
-
-    # 1) Опасное расширение
     if ext in DANGEROUS_EXT:
         return f"Опасное расширение {ext} — {DANGEROUS_EXT[ext]}"
-
-    # 2) Маркер угрозы в имени
     for marker, kind in THREAT_SIGNATURES.items():
         for sep in ('', '_', '-', '.', ' '):
             if f"{sep}{marker}{sep}" in name or name.startswith(marker) or name.endswith(marker):
-                return f"Класс угрозы: {kind} (маркер «{marker}»)"
-
-    # 3) Двойное расширение (маскировка)
+                return f"Класс угрозы: {kind}"
     parts = name.split('.')
     if len(parts) >= 3:
         inner = '.' + parts[-2]
         outer = '.' + parts[-1]
         if outer in DANGEROUS_EXT and inner in MASK_EXT:
-            return f"Маскировка: {inner}{outer} — подделка под документ/медиа"
-
+            return f"Маскировка: {inner}{outer}"
     return None
 
 
 def is_suspicious(path):
-    """Обёртка для realtime."""
     return analyze_file(path)
 
 
 def process_capabilities(name):
-    """Возвращает строку прав процесса, например 'WEBCAM / SCREEN'."""
     if not name:
         return ""
     low = name.lower()
@@ -246,9 +202,6 @@ def process_capabilities(name):
     return " / ".join(result).upper()
 
 
-# ============================================================
-#   АНИМИРОВАННЫЕ ВИДЖЕТЫ
-# ============================================================
 def _shade(hex_color, factor):
     h = hex_color.lstrip("#")
     r, g, b = int(h[0:2],16), int(h[2:4],16), int(h[4:6],16)
@@ -328,7 +281,7 @@ class AnimatedBar(tk.Canvas):
 
 class Toast:
     _stack = []
-    def __init__(self, root, title, subtitle, color=WARN, icon="⚠", duration=4200):
+    def __init__(self, root, title, subtitle, color=WARN, icon="!", duration=4200):
         self.root = root
         self.win = tk.Toplevel(root)
         self.win.overrideredirect(True)
@@ -413,9 +366,6 @@ class SideButton(tk.Frame):
         else:  self._paint(SIDEBAR, SUB, SIDEBAR)
 
 
-# ============================================================
-#   VIRUSTOTAL
-# ============================================================
 class VirusTotal:
     BASE = "https://www.virustotal.com/api/v3/files/"
 
@@ -490,9 +440,6 @@ class VirusTotal:
         self.cache[digest] = res; self._save_cache(); return res
 
 
-# ============================================================
-#   REALTIME-ЗАЩИТА
-# ============================================================
 class RealtimeWatcher(FileSystemEventHandler):
     def __init__(self, q): self.q = q
     def on_created(self, event):
@@ -566,7 +513,6 @@ class RealtimeEngine:
             except queue.Empty: break
         for path, reason in events:
             try:
-                # Белый список расширений
                 ext = os.path.splitext(path)[1].lower()
                 if ext in self.safe_ext:
                     continue
@@ -604,9 +550,6 @@ class RealtimeEngine:
                 self.on_threat(path, reason + f" (ошибка: {e})", original=path)
 
 
-# ============================================================
-#   ГЛАВНОЕ ОКНО
-# ============================================================
 class AegisApp:
     def __init__(self, root):
         self.root = root
@@ -615,7 +558,6 @@ class AegisApp:
         self.root.configure(bg=BG)
         self.root.minsize(1050, 660)
 
-        # Иконка окна
         try:
             base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
             icon_path = os.path.join(base, "icon.ico")
@@ -634,7 +576,6 @@ class AegisApp:
         self.config = self._load_config()
         self.vt = VirusTotal(self.config.get("vt_api_key", ""))
 
-        # Белый список расширений
         safe_from_cfg = self.config.get("safe_ext", list(DEFAULT_SAFE_EXT))
         self.safe_ext = set(e.lower() for e in safe_from_cfg)
 
@@ -653,7 +594,6 @@ class AegisApp:
         self.root.after(4000, self._auto_refresh_procs)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
-    # ---------- CONFIG ----------
     def _load_config(self):
         if os.path.exists(CONFIG_FILE):
             try:
@@ -668,7 +608,6 @@ class AegisApp:
                 json.dump(self.config, f, ensure_ascii=False, indent=2)
         except Exception: pass
 
-    # ---------- STYLE ----------
     def _style(self):
         s = ttk.Style()
         s.theme_use("clam")
@@ -685,13 +624,12 @@ class AegisApp:
                     background=CARD, troughcolor=SIDEBAR,
                     borderwidth=0, arrowcolor=SUB)
 
-    # ---------- TOPBAR ----------
     def _build_topbar(self):
         bar = tk.Frame(self.root, bg=SIDEBAR, height=64)
         bar.pack(fill="x", side="top"); bar.pack_propagate(False)
 
         logo = tk.Frame(bar, bg=SIDEBAR); logo.pack(side="left", padx=(22, 0))
-        tk.Label(logo, text="◈", bg=SIDEBAR, fg=ACCENT,
+        tk.Label(logo, text="A", bg=SIDEBAR, fg=ACCENT,
                  font=("Segoe UI Semibold", 20)).pack(side="left")
         tk.Label(logo, text="AEGIS", bg=SIDEBAR, fg=FG,
                  font=("Segoe UI Semibold", 15)).pack(side="left", padx=(6,0))
@@ -712,7 +650,6 @@ class AegisApp:
 
         tk.Frame(self.root, bg=BORDER, height=1).pack(fill="x")
 
-    # ---------- SIDEBAR ----------
     def _build_sidebar(self):
         self.sidebar = tk.Frame(self.root, bg=SIDEBAR, width=220)
         self.sidebar.pack(side="left", fill="y"); self.sidebar.pack_propagate(False)
@@ -721,12 +658,12 @@ class AegisApp:
                  font=("Segoe UI", 8), anchor="w").pack(fill="x", padx=22, pady=(0,8))
 
         items = [
-            ("dashboard","Панель","▣"),
-            ("procs","Диспетчер задач","☰"),
-            ("quick","Быстрая проверка","⚡"),
-            ("full","Долгая проверка","◐"),
-            ("quarantine","Карантин","☣"),
-            ("settings","Настройки","⚙"),
+            ("dashboard","Панель","1"),
+            ("procs","Диспетчер задач","2"),
+            ("quick","Быстрая проверка","3"),
+            ("full","Долгая проверка","4"),
+            ("quarantine","Карантин","5"),
+            ("settings","Настройки","6"),
         ]
         self.nav_buttons = {}
         for key, label, icon in items:
@@ -739,13 +676,12 @@ class AegisApp:
 
         bottom = tk.Frame(self.sidebar, bg=CARD)
         bottom.pack(fill="x", side="bottom", padx=12, pady=12)
-        tk.Label(bottom, text="🛡  Realtime", bg=CARD, fg=FG,
+        tk.Label(bottom, text="Realtime", bg=CARD, fg=FG,
                  font=FONT_B).pack(anchor="w", padx=12, pady=(10,0))
         self.rt_stat = tk.Label(bottom, text="Следит за папками",
                                 bg=CARD, fg=SUB, font=("Segoe UI", 9))
         self.rt_stat.pack(anchor="w", padx=12, pady=(2,12))
 
-    # ---------- CONTENT ----------
     def _build_content(self):
         self.content = tk.Frame(self.root, bg=BG)
         self.content.pack(side="right", fill="both", expand=True)
@@ -765,9 +701,6 @@ class AegisApp:
             else: page.pack_forget()
         self.current_page = key
 
-    # ==========================================================
-    #   DASHBOARD
-    # ==========================================================
     def _page_dashboard(self):
         p = tk.Frame(self.content, bg=BG)
         tk.Label(p, text="Панель управления", bg=BG, fg=FG,
@@ -776,15 +709,15 @@ class AegisApp:
                  font=FONT).pack(anchor="w", pady=(0,22))
 
         cards = tk.Frame(p, bg=BG); cards.pack(fill="x", pady=(0,18))
-        self.card_found = self._stat_card(cards, "☣", "Найдено угроз", "0", DANGER)
-        self.card_quar  = self._stat_card(cards, "🔒", "В карантине", "0", WARN)
-        self.card_rt    = self._stat_card(cards, "🛡", "Защита", "ВКЛ", ACCENT)
+        self.card_found = self._stat_card(cards, "X", "Найдено угроз", "0", DANGER)
+        self.card_quar  = self._stat_card(cards, "Q", "В карантине", "0", WARN)
+        self.card_rt    = self._stat_card(cards, "S", "Защита", "ВКЛ", ACCENT)
 
         actions = tk.Frame(p, bg=BG); actions.pack(fill="x", pady=(4,18))
-        self._big_action(actions, "⚡", "Быстрая проверка",
+        self._big_action(actions, "F", "Быстрая проверка",
                          "TEMP, Downloads, AppData",
                          lambda: self._goto_and_scan("quick"))
-        self._big_action(actions, "◐", "Долгая проверка",
+        self._big_action(actions, "S", "Долгая проверка",
                          "Сканировать все диски",
                          lambda: self._goto_and_scan("full"))
 
@@ -792,11 +725,11 @@ class AegisApp:
         left = tk.Frame(rt_box, bg=CARD); left.pack(side="left", padx=22, pady=18)
         tk.Label(left, text="Защита в реальном времени", bg=CARD, fg=FG,
                  font=FONT_H).pack(anchor="w")
-        self.rt_desc = tk.Label(left, text="Следит за TEMP, Downloads, AppData…",
+        self.rt_desc = tk.Label(left, text="Следит за TEMP, Downloads, AppData",
                                 bg=CARD, fg=SUB, font=FONT)
         self.rt_desc.pack(anchor="w", pady=(4,0))
         right = tk.Frame(rt_box, bg=CARD); right.pack(side="right", padx=22)
-        self.rt_toggle = HoverButton(right, "⏸  Пауза", self._toggle_realtime,
+        self.rt_toggle = HoverButton(right, "Пауза", self._toggle_realtime,
                                      color=CARD_HOV, fg=FG, pad=(18,10))
         self.rt_toggle.pack()
         return p
@@ -805,7 +738,7 @@ class AegisApp:
         c = tk.Frame(parent, bg=CARD)
         c.pack(side="left", fill="both", expand=True, padx=(0,12))
         tk.Label(c, text=icon, bg=CARD, fg=color,
-                 font=("Segoe UI", 20)).pack(anchor="w", padx=18, pady=(16,0))
+                 font=("Segoe UI Semibold", 20)).pack(anchor="w", padx=18, pady=(16,0))
         tk.Label(c, text=title, bg=CARD, fg=SUB, font=FONT).pack(anchor="w", padx=18)
         v = tk.Label(c, text=value, bg=CARD, fg=FG,
                      font=("Segoe UI Semibold", 24))
@@ -818,11 +751,11 @@ class AegisApp:
         inner = tk.Frame(c, bg=CARD); inner.pack(fill="both", expand=True,
                                                  padx=22, pady=22)
         tk.Label(inner, text=icon, bg=CARD, fg=ACCENT,
-                 font=("Segoe UI", 26)).pack(anchor="w")
+                 font=("Segoe UI Semibold", 26)).pack(anchor="w")
         tk.Label(inner, text=title, bg=CARD, fg=FG,
                  font=("Segoe UI Semibold", 14)).pack(anchor="w", pady=(8,0))
         tk.Label(inner, text=sub, bg=CARD, fg=SUB, font=FONT).pack(anchor="w", pady=(2,12))
-        tk.Label(inner, text="Запустить →", bg=CARD, fg=ACCENT,
+        tk.Label(inner, text="Запустить", bg=CARD, fg=ACCENT,
                  font=FONT_B).pack(anchor="w")
         def enter(e):
             for w in [c, inner] + list(inner.winfo_children()):
@@ -843,20 +776,17 @@ class AegisApp:
     def _toggle_realtime(self):
         if self.rt_enabled:
             self.rt.stop(); self.rt_enabled = False
-            self.rt_toggle.config(text="▶  Возобновить")
+            self.rt_toggle.config(text="Возобновить")
             self.rt_label.config(text="ЗАЩИТА ПРИОСТАНОВЛЕНА", fg=WARN)
             self.pulse.set_color(WARN); self.pulse.pause()
             self.rt_desc.config(text="Защита остановлена.")
         else:
             self.rt.start(); self.rt_enabled = True
-            self.rt_toggle.config(text="⏸  Пауза")
+            self.rt_toggle.config(text="Пауза")
             self.rt_label.config(text="ЗАЩИТА АКТИВНА", fg=ACCENT)
             self.pulse.set_color(ACCENT); self.pulse.resume()
-            self.rt_desc.config(text="Следит за TEMP, Downloads, AppData…")
+            self.rt_desc.config(text="Следит за TEMP, Downloads, AppData")
 
-    # ==========================================================
-    #   ДИСПЕТЧЕР ЗАДАЧ
-    # ==========================================================
     def _page_procs(self):
         p = tk.Frame(self.content, bg=BG)
         tk.Label(p, text="Диспетчер задач", bg=BG, fg=FG,
@@ -865,22 +795,22 @@ class AegisApp:
                  bg=BG, fg=SUB, font=FONT).pack(anchor="w", pady=(0,18))
 
         bar = tk.Frame(p, bg=BG); bar.pack(fill="x", pady=(0,12))
-        HoverButton(bar, "⟳  Обновить", self.refresh_procs).pack(side="left")
-        HoverButton(bar, "✕  Завершить", self.kill_selected,
+        HoverButton(bar, "Обновить", self.refresh_procs).pack(side="left")
+        HoverButton(bar, "Завершить", self.kill_selected,
                     color=DANGER, fg="#fff").pack(side="left", padx=8)
-        HoverButton(bar, "⛔  Завершить всё лишнее", self.kill_all,
+        HoverButton(bar, "Завершить лишнее", self.kill_all,
                     color=DANGER, fg="#fff").pack(side="left")
-        HoverButton(bar, "➕  Добавить в автозагрузку", self.add_to_startup,
+        HoverButton(bar, "В автозагрузку", self.add_to_startup,
                     color=WARN, fg="#000").pack(side="left", padx=8)
-        HoverButton(bar, "📋  Показать автозагрузку", self.show_autostart,
+        HoverButton(bar, "Автозагрузка", self.show_autostart,
                     color=ACCENT, fg="#000").pack(side="left")
 
         wrap = tk.Frame(p, bg=CARD); wrap.pack(fill="both", expand=True)
         cols = ("name","pid","cpu","mem","caps","path")
         self.tv = ttk.Treeview(wrap, columns=cols, show="headings",
                                selectmode="extended", style="Aegis.Treeview")
-        for c,t,w in [("name","Процесс",220),("pid","PID",60),("cpu","CPU %",70),
-                      ("mem","Память, МБ",100),("caps","Права",200),
+        for c,t,w in [("name","Процесс",220),("pid","PID",60),("cpu","CPU",70),
+                      ("mem","Память",100),("caps","Права",200),
                       ("path","Путь",360)]:
             self.tv.heading(c, text=t); self.tv.column(c, width=w, anchor="w")
         for col in cols:
@@ -963,7 +893,7 @@ class AegisApp:
                 proc.kill(); killed += 1
             except Exception: pass
         self.refresh_procs()
-        self._toast("Процессы завершены", f"Успешно: {killed}", ACCENT, "✔")
+        self._toast("Процессы завершены", f"Успешно: {killed}", ACCENT, "+")
 
     def kill_all(self):
         if not messagebox.askyesno("Aegis", "Завершить все процессы, кроме системных?"):
@@ -976,7 +906,7 @@ class AegisApp:
                 p.kill(); killed += 1
             except Exception: pass
         self.refresh_procs()
-        self._toast("Массовое завершение", f"Завершено: {killed}", ACCENT, "✔")
+        self._toast("Массовое завершение", f"Завершено: {killed}", ACCENT, "+")
 
     def open_process_folder(self):
         sel = self.tv.selection()
@@ -995,17 +925,13 @@ class AegisApp:
         m = tk.Menu(self.root, tearoff=0, bg=CARD, fg=FG,
                     activebackground=ACCENT, activeforeground="#000",
                     bd=0, font=FONT)
-        m.add_command(label="🗂  Открыть папку процесса",
-                      command=self.open_process_folder)
-        m.add_command(label="✕  Завершить",
-                      command=self.kill_selected)
+        m.add_command(label="Открыть папку", command=self.open_process_folder)
+        m.add_command(label="Завершить", command=self.kill_selected)
         m.add_separator()
-        m.add_command(label="➕  Добавить в автозагрузку",
-                      command=self.add_process_to_startup)
+        m.add_command(label="В автозагрузку", command=self.add_process_to_startup)
         try: m.tk_popup(event.x_root, event.y_root)
         finally: m.grab_release()
 
-    # -------- АВТОЗАГРУЗКА --------
     def add_to_startup(self):
         path = filedialog.askopenfilename(
             title="Выбери файл для автозагрузки",
@@ -1022,7 +948,7 @@ class AegisApp:
                 winreg.KEY_SET_VALUE)
             winreg.SetValueEx(k, name, 0, winreg.REG_SZ, path)
             winreg.CloseKey(k)
-            self._toast("Добавлено в автозагрузку", f"{name}\n{path}", ACCENT, "✔")
+            self._toast("Добавлено в автозагрузку", f"{name}", ACCENT, "+")
         except Exception as e:
             messagebox.showerror("Aegis", f"Не удалось добавить:\n{e}")
 
@@ -1033,8 +959,7 @@ class AegisApp:
         vals = self.tv.item(sel[0], "values")
         name = vals[0]; path = vals[5]
         if not path or not os.path.exists(path):
-            messagebox.showinfo("Aegis",
-                "У процесса нет доступного пути. Нельзя добавить в автозагрузку.")
+            messagebox.showinfo("Aegis", "У процесса нет доступного пути.")
             return
         if not messagebox.askyesno("Aegis",
                 f"Добавить в автозагрузку?\n\n{name}\n{path}"): return
@@ -1046,7 +971,7 @@ class AegisApp:
                 winreg.KEY_SET_VALUE)
             winreg.SetValueEx(k, key_name, 0, winreg.REG_SZ, path)
             winreg.CloseKey(k)
-            self._toast("В автозагрузке", f"{key_name} → {path}", ACCENT, "✔")
+            self._toast("В автозагрузке", key_name, ACCENT, "+")
         except Exception as e:
             messagebox.showerror("Aegis", f"Не удалось:\n{e}")
 
@@ -1059,8 +984,7 @@ class AegisApp:
         tk.Label(win, text="Автозагрузка", bg=BG, fg=FG,
                  font=FONT_H).pack(anchor="w", padx=20, pady=(18,4))
         tk.Label(win, text="Программы, стартующие вместе с Windows.",
-                 bg=BG, fg=SUB, font=("Segoe UI", 9),
-                 wraplength=800, justify="left").pack(anchor="w", padx=20, pady=(0,12))
+                 bg=BG, fg=SUB, font=("Segoe UI", 9)).pack(anchor="w", padx=20, pady=(0,12))
 
         tv = ttk.Treeview(win, columns=("name","source","path"),
                           show="headings", selectmode="extended",
@@ -1081,8 +1005,8 @@ class AegisApp:
         load()
 
         bar = tk.Frame(win, bg=BG); bar.pack(fill="x", padx=20, pady=14)
-        HoverButton(bar, "⟳  Обновить", load).pack(side="left")
-        HoverButton(bar, "➕  Добавить", self.add_to_startup,
+        HoverButton(bar, "Обновить", load).pack(side="left")
+        HoverButton(bar, "Добавить", self.add_to_startup,
                     color=WARN, fg="#000").pack(side="left", padx=8)
 
         def remove_selected():
@@ -1094,9 +1018,9 @@ class AegisApp:
                 name, source, path = tv.item(it, "values")
                 self._remove_autostart(name, source, path)
             load()
-            self._toast("Автозагрузка", "Записи удалены", ACCENT, "✔")
+            self._toast("Автозагрузка", "Записи удалены", ACCENT, "+")
 
-        HoverButton(bar, "🗑  Удалить выбранные", remove_selected,
+        HoverButton(bar, "Удалить", remove_selected,
                     color=DANGER, fg="#fff").pack(side="left")
 
     def _get_autostart(self):
@@ -1104,7 +1028,7 @@ class AegisApp:
         for d in STARTUP_DIRS:
             if os.path.isdir(d):
                 for f in os.listdir(d):
-                    result.append((f, "Startup-папка", os.path.join(d, f)))
+                    result.append((f, "Startup", os.path.join(d, f)))
         try:
             import winreg
             k = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
@@ -1114,7 +1038,7 @@ class AegisApp:
             while True:
                 try:
                     name, val, _ = winreg.EnumValue(k, i); i += 1
-                    result.append((name, "Реестр HKCU", val))
+                    result.append((name, "HKCU", val))
                 except OSError: break
             winreg.CloseKey(k)
         except Exception: pass
@@ -1127,7 +1051,7 @@ class AegisApp:
             while True:
                 try:
                     name, val, _ = winreg.EnumValue(k, i); i += 1
-                    result.append((name, "Реестр HKLM", val))
+                    result.append((name, "HKLM", val))
                 except OSError: break
             winreg.CloseKey(k)
         except Exception: pass
@@ -1155,8 +1079,7 @@ class AegisApp:
                 winreg.DeleteValue(k, name)
                 winreg.CloseKey(k)
             except Exception as e:
-                messagebox.showerror("Aegis",
-                    f"HKLM требует прав администратора:\n{e}")
+                messagebox.showerror("Aegis", f"HKLM требует прав администратора:\n{e}")
 
     def _ask_string(self, title, prompt, default=""):
         dlg = tk.Toplevel(self.root)
@@ -1175,27 +1098,23 @@ class AegisApp:
             dlg.destroy()
         bar = tk.Frame(dlg, bg=BG); bar.pack(fill="x", padx=20, pady=16)
         HoverButton(bar, "OK", ok).pack(side="right")
-        HoverButton(bar, "Отмена", cancel,
-                    color=CARD_HOV, fg=FG).pack(side="right", padx=8)
+        HoverButton(bar, "Отмена", cancel, color=CARD_HOV, fg=FG).pack(side="right", padx=8)
         e.bind("<Return>", lambda ev: ok())
         dlg.wait_window()
         return result["value"]
 
-    # ==========================================================
-    #   SCAN
-    # ==========================================================
     def _page_scan(self, quick=True):
         p = tk.Frame(self.content, bg=BG)
         title = "Быстрая проверка" if quick else "Долгая проверка"
         desc  = ("Сканирует TEMP, Загрузки, AppData, автозагрузку."
                  if quick else
-                 "Полное сканирование всех дисков. Может занять время.")
+                 "Полное сканирование всех дисков.")
         tk.Label(p, text=title, bg=BG, fg=FG, font=FONT_T).pack(anchor="w", pady=(0,4))
         tk.Label(p, text=desc, bg=BG, fg=SUB, font=FONT).pack(anchor="w", pady=(0,18))
 
         bar = tk.Frame(p, bg=BG); bar.pack(fill="x", pady=(0,12))
-        HoverButton(bar, "▶  Запустить", lambda: self._start_scan(quick)).pack(side="left")
-        HoverButton(bar, "■  Стоп", self._stop_scan,
+        HoverButton(bar, "Запустить", lambda: self._start_scan(quick)).pack(side="left")
+        HoverButton(bar, "Стоп", self._stop_scan,
                     color=DANGER, fg="#fff").pack(side="left", padx=8)
         lbl = tk.Label(bar, text="Готов", bg=BG, fg=SUB, font=FONT)
         lbl.pack(side="left", padx=20)
@@ -1234,7 +1153,7 @@ class AegisApp:
         self.scanning = True; self.stop_flag = False
         (self.prog_quick if quick else self.prog_long).start()
         (self.log_quick if quick else self.log_long).delete("1.0", "end")
-        self._status_lbl(quick).config(text="Сканирование…", fg=ACCENT)
+        self._status_lbl(quick).config(text="Сканирование...", fg=ACCENT)
         threading.Thread(target=self._scan_worker, args=(quick,), daemon=True).start()
 
     def _stop_scan(self):
@@ -1243,10 +1162,10 @@ class AegisApp:
     def _scan_worker(self, quick):
         try:
             if quick:
-                self._log(True, "[*] Быстрая проверка запущена.", "ok")
+                self._log(True, "Быстрая проверка запущена.", "ok")
                 targets = [d for d in QUICK_DIRS if os.path.isdir(d)]
             else:
-                self._log(False, "[*] Долгая проверка запущена.", "ok")
+                self._log(False, "Долгая проверка запущена.", "ok")
                 targets = [f"{d}:\\" for d in "CDEFGH" if os.path.exists(f"{d}:\\")]
             for base in targets:
                 if self.stop_flag: break
@@ -1254,13 +1173,12 @@ class AegisApp:
         finally:
             self.scanning = False
             (self.prog_quick if quick else self.prog_long).stop()
-            self._log(quick, f"[✓] Готово. Найдено: {len(self.quarantine)}", "ok")
+            self._log(quick, f"Готово. Найдено: {len(self.quarantine)}", "ok")
             self.root.after(0, lambda: self._status_lbl(quick).config(text="Готов", fg=SUB))
 
     def _scan_dir(self, base, quick):
         for root, dirs, files in os.walk(base):
             if self.stop_flag: return
-            # не заходим в папку карантина
             if QUARANTINE_DIR.lower() in root.lower():
                 continue
             dirs[:] = [d for d in dirs if d.lower() not in SKIP_DIRS]
@@ -1286,13 +1204,12 @@ class AegisApp:
         if in_temp and ext == '.exe':
             try:
                 if os.path.getsize(path) > 100 * 1024 * 1024:
-                    return "Крупный .exe (>100 МБ) в системной папке"
+                    return "Крупный .exe в системной папке"
             except Exception:
                 pass
         return None
 
     def _quarantine_file(self, path):
-        """Перемещает файл в карантин. Возвращает (новый_путь, ошибка)."""
         try:
             if not os.path.exists(path):
                 return None, "файл уже отсутствует"
@@ -1322,20 +1239,17 @@ class AegisApp:
             "moved": bool(moved_path),
         }
         if err:
-            entry["reason"] += f" (не удалось переместить: {err})"
+            entry["reason"] += f" (не удалось перенести: {err})"
         self.quarantine.append(entry)
-        self._log(quick, f"⚠  {path}\n    → {reason}", "warn")
+        self._log(quick, f"{path}\n    {reason}", "warn")
         self.root.after(0, self.refresh_quarantine)
         self.root.after(0, lambda: self._animate_counter(self.card_found, len(self.quarantine)))
         self.root.after(0, lambda: self._animate_counter(self.card_quar, len(self.quarantine)))
 
-    # ==========================================================
-    #   КАРАНТИН
-    # ==========================================================
     def _page_quarantine(self):
         p = tk.Frame(self.content, bg=BG)
         tk.Label(p, text="Карантин", bg=BG, fg=FG, font=FONT_T).pack(anchor="w", pady=(0,4))
-        tk.Label(p, text="Все подозрительные файлы. Оригинал перенесён сюда.",
+        tk.Label(p, text="Все подозрительные файлы.",
                  bg=BG, fg=SUB, font=FONT).pack(anchor="w", pady=(0,18))
 
         wrap = tk.Frame(p, bg=CARD); wrap.pack(fill="both", expand=True)
@@ -1352,11 +1266,11 @@ class AegisApp:
         sb.pack(side="right", fill="y", pady=8)
 
         bar = tk.Frame(p, bg=BG); bar.pack(fill="x", pady=14)
-        HoverButton(bar, "🗑  Удалить навсегда", self.del_perm,
+        HoverButton(bar, "Удалить навсегда", self.del_perm,
                     color=DANGER, fg="#fff").pack(side="left")
-        HoverButton(bar, "✕  Убрать из списка", self.del_from_list).pack(side="left", padx=8)
-        HoverButton(bar, "📂  Открыть папку", self.open_folder).pack(side="left")
-        HoverButton(bar, "🛡  Проверить в VT", self.vt_check_selected,
+        HoverButton(bar, "Убрать из списка", self.del_from_list).pack(side="left", padx=8)
+        HoverButton(bar, "Открыть папку", self.open_folder).pack(side="left")
+        HoverButton(bar, "Проверить в VT", self.vt_check_selected,
                     color=ACCENT, fg="#000").pack(side="left", padx=8)
         return p
 
@@ -1382,7 +1296,7 @@ class AegisApp:
             self.quarantine = [q for q in self.quarantine if q["path"] != path]
         self.refresh_quarantine()
         self._animate_counter(self.card_quar, len(self.quarantine))
-        self._toast("Карантин", "Файлы удалены", ACCENT, "✔")
+        self._toast("Карантин", "Файлы удалены", ACCENT, "+")
 
     def del_from_list(self):
         for it in self.tv_q.selection():
@@ -1415,9 +1329,9 @@ class AegisApp:
     def _vt_result(self, res, path):
         name = os.path.basename(path)
         if res["status"] == "error":
-            self._toast("VirusTotal", res["message"], DANGER, "✗"); return
+            self._toast("VirusTotal", res["message"], DANGER, "!"); return
         if res["status"] == "malicious":
-            color, title = DANGER, f"ВИРУС! {name}"
+            color, title = DANGER, f"ВИРУС: {name}"
         elif res["status"] == "clean":
             color, title = ACCENT, f"Чисто: {name}"
         else:
@@ -1427,33 +1341,28 @@ class AegisApp:
             if q["path"] == path:
                 q["reason"] += f" | VT: {res['status']} {msg}"; break
         self.refresh_quarantine()
-        self._toast(title, msg, color, "🛡")
+        self._toast(title, msg, color, "S")
         if res.get("link"):
             try:
                 with open(LOG_FILE, "a", encoding="utf-8") as f:
                     f.write(f"[VT] {path} -> {res['link']}\n")
             except Exception: pass
 
-    # ==========================================================
-    #   НАСТРОЙКИ
-    # ==========================================================
     def _page_settings(self):
         p = tk.Frame(self.content, bg=BG)
         tk.Label(p, text="Настройки", bg=BG, fg=FG, font=FONT_T).pack(anchor="w", pady=(0,4))
         tk.Label(p, text="Параметры Aegis Cleaner", bg=BG, fg=SUB,
                  font=FONT).pack(anchor="w", pady=(0,18))
 
-        # --- VirusTotal ---
         box_vt = tk.Frame(p, bg=CARD); box_vt.pack(fill="x", pady=(0,12))
         tk.Label(box_vt, text="VirusTotal API", bg=CARD, fg=FG,
                  font=FONT_H).pack(anchor="w", padx=20, pady=(16,4))
         tk.Label(box_vt,
-                 text="Вставь бесплатный API-ключ (virustotal.com → профиль → API key).\n"
-                      "Проверка по SHA-256, лимит 4 запроса/мин.",
-                 bg=CARD, fg=SUB, font=("Segoe UI", 9), justify="left").pack(anchor="w", padx=20)
+                 text="Вставь бесплатный API-ключ. Проверка по SHA-256, 4 запроса в минуту.",
+                 bg=CARD, fg=SUB, font=("Segoe UI", 9)).pack(anchor="w", padx=20)
 
         row = tk.Frame(box_vt, bg=CARD); row.pack(fill="x", padx=20, pady=(10,4))
-        self.vt_entry = tk.Entry(row, show="•", bg=CARD_HOV, fg=FG,
+        self.vt_entry = tk.Entry(row, show="*", bg=CARD_HOV, fg=FG,
                                  insertbackground=ACCENT, relief="flat",
                                  font=("Consolas", 10), bd=0)
         self.vt_entry.pack(side="left", fill="x", expand=True, ipady=8, padx=(0,8))
@@ -1470,7 +1379,7 @@ class AegisApp:
             self.vt.api_key = key
             self.rt.vt = self.vt
             if key:
-                self.vt_status.config(text="Ключ сохранён. Проверяю…", fg=SUB)
+                self.vt_status.config(text="Ключ сохранён. Проверяю...", fg=SUB)
                 def test():
                     p2 = os.path.join(AEGIS_DIR, "config.json")
                     if not os.path.exists(p2):
@@ -1478,19 +1387,18 @@ class AegisApp:
                     res = self.vt.check_file(p2)
                     if res["status"] == "error":
                         self.root.after(0, lambda: self.vt_status.config(
-                            text=f"✗ {res['message']}", fg=DANGER))
+                            text=f"Ошибка: {res['message']}", fg=DANGER))
                     else:
                         self.root.after(0, lambda: self.vt_status.config(
-                            text=f"✓ Ключ работает ({res['status']})", fg=ACCENT))
+                            text=f"Ключ работает ({res['status']})", fg=ACCENT))
                 threading.Thread(target=test, daemon=True).start()
             else:
                 self.vt_status.config(text="Ключ удалён", fg=WARN)
 
-        HoverButton(box_vt, "💾  Сохранить ключ", save_key).pack(anchor="w", padx=20, pady=(0,16))
+        HoverButton(box_vt, "Сохранить ключ", save_key).pack(anchor="w", padx=20, pady=(0,16))
 
-        # --- Белый список расширений ---
         box_safe = tk.Frame(p, bg=CARD); box_safe.pack(fill="x", pady=(0,12))
-        tk.Label(box_safe, text="Не кидать в карантин (расширения)",
+        tk.Label(box_safe, text="Не кидать в карантин",
                  bg=CARD, fg=FG, font=FONT_H).pack(anchor="w", padx=20, pady=(16,4))
         tk.Label(box_safe,
                  text="Файлы с этими расширениями игнорируются эвристикой.",
@@ -1532,7 +1440,7 @@ class AegisApp:
                 tag.pack(side="left", padx=(0, 6), pady=2)
                 tk.Label(tag, text=ext, bg=CARD_HOV, fg=FG,
                          font=("Consolas", 9), padx=8, pady=4).pack(side="left")
-                rem = tk.Label(tag, text="✕", bg=CARD_HOV, fg=DANGER,
+                rem = tk.Label(tag, text="x", bg=CARD_HOV, fg=DANGER,
                                font=("Segoe UI Semibold", 10),
                                padx=6, cursor="hand2")
                 rem.pack(side="left")
@@ -1547,7 +1455,6 @@ class AegisApp:
                 rem.bind("<Button-1>", lambda ev, r=make_remover(): r())
         _refresh_safe_list()
 
-        # --- Пути ---
         box2 = tk.Frame(p, bg=CARD); box2.pack(fill="x", pady=(0,12))
         tk.Label(box2, text="Пути данных", bg=CARD, fg=FG,
                  font=FONT_H).pack(anchor="w", padx=20, pady=(16,8))
@@ -1555,13 +1462,10 @@ class AegisApp:
                  bg=CARD, fg=SUB, font=("Segoe UI", 9)).pack(anchor="w", padx=20)
         tk.Label(box2, text=f"Лог:  {LOG_FILE}",
                  bg=CARD, fg=SUB, font=("Segoe UI", 9)).pack(anchor="w", padx=20, pady=(2,16))
-        HoverButton(box2, "📂  Открыть папку карантина",
+        HoverButton(box2, "Открыть папку карантина",
                     lambda: os.startfile(QUARANTINE_DIR)).pack(anchor="w", padx=20, pady=(0,16))
         return p
 
-    # ==========================================================
-    #   REALTIME → UI
-    # ==========================================================
     def _poll_rt(self):
         if self.rt_enabled: self.rt.poll()
         self.root.after(200, self._poll_rt)
@@ -1582,11 +1486,8 @@ class AegisApp:
         self.root.after(0, lambda: self._animate_counter(self.card_quar, len(self.quarantine)))
         self.root.after(0, lambda: self._toast(
             "Обнаружена угроза",
-            f"{os.path.basename(original or path)}\n{reason}", DANGER, "⚠"))
+            f"{os.path.basename(original or path)}\n{reason}", DANGER, "!"))
 
-    # ==========================================================
-    #   UTIL
-    # ==========================================================
     def _animate_counter(self, label, target, duration=420, steps=24):
         try: current = int(label.cget("text"))
         except Exception: current = 0
@@ -1598,7 +1499,7 @@ class AegisApp:
             self.root.after(duration // steps, lambda: step(i + 1))
         step(1)
 
-    def _toast(self, title, subtitle, color=ACCENT, icon="✓"):
+    def _toast(self, title, subtitle, color=ACCENT, icon="+"):
         try: Toast(self.root, title, subtitle, color=color, icon=icon)
         except Exception: pass
 
@@ -1613,9 +1514,6 @@ class AegisApp:
         self.root.destroy()
 
 
-# ============================================================
-#   ЗАПУСК
-# ============================================================
 if __name__ == "__main__":
     root = tk.Tk()
     AegisApp(root)
