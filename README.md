@@ -1,3 +1,4 @@
+<img width="1010" height="666" alt="image" src="https://github.com/user-attachments/assets/bae4a0e6-ad95-482d-a0b9-7eede7cd5665" />
 Всем привет! 👋
 
 Это моя первая работа с программами. Раньше писал только мелочи, а тут решил собрать что-то посерьёзнее. Получился учебный антивирус для Windows — называется Aegis Cleaner.
