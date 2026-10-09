@@ -1,13 +1,7 @@
-# ============================================================
-#   AEGIS CLEANER — УСТАНОВЩИК
-#   Ставит AegisCleaner.exe в систему, настраивает автозагрузку,
-#   создаёт ярлыки, регистрирует в «Установка и удаление программ».
-# ============================================================
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os, sys, shutil, subprocess, winreg, threading, time
 
-# ---------- ПАЛИТРА ----------
 BG       = "#0a0a0c"
 SIDEBAR  = "#0e0e11"
 CARD     = "#16161a"
@@ -22,7 +16,6 @@ WARN     = "#ffb300"
 FONT   = ("Segoe UI", 10)
 FONT_B = ("Segoe UI Semibold", 10)
 FONT_H = ("Segoe UI Semibold", 14)
-FONT_T = ("Segoe UI Semibold", 18)
 
 APP_NAME    = "Aegis Cleaner"
 EXE_NAME    = "AegisCleaner.exe"
@@ -30,9 +23,6 @@ REG_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 REG_UNINST  = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisCleaner"
 
 
-# ============================================================
-#   УТИЛИТЫ
-# ============================================================
 def _shade(hex_color, factor):
     h = hex_color.lstrip("#")
     r, g, b = int(h[0:2],16), int(h[2:4],16), int(h[4:6],16)
@@ -43,7 +33,6 @@ def _shade(hex_color, factor):
 
 
 def resource_path(rel):
-    """Путь к ресурсу: работает и при сборке --onefile, и при запуске из Python."""
     try:
         base = sys._MEIPASS
     except Exception:
@@ -52,7 +41,6 @@ def resource_path(rel):
 
 
 def default_install_dir():
-    """%LOCALAPPDATA%\\Aegis Cleaner — без прав администратора."""
     return os.path.join(os.path.expandvars(r'%LOCALAPPDATA%'), APP_NAME)
 
 
@@ -61,7 +49,6 @@ def is_installed():
     return os.path.exists(os.path.join(d, EXE_NAME))
 
 
-# ---------- РЕЕСТР ----------
 def reg_set_autostart(exe_path):
     try:
         k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_RUN_KEY, 0,
@@ -88,7 +75,6 @@ def reg_remove_autostart():
 
 
 def reg_write_uninstall(install_dir, exe_path):
-    """Регистрация в списке «Установка и удаление программ»."""
     try:
         k = winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_UNINST)
         winreg.SetValueEx(k, "DisplayName",     0, winreg.REG_SZ, APP_NAME)
@@ -96,8 +82,7 @@ def reg_write_uninstall(install_dir, exe_path):
         winreg.SetValueEx(k, "DisplayVersion",  0, winreg.REG_SZ, "1.0.0")
         winreg.SetValueEx(k, "Publisher",       0, winreg.REG_SZ, "Aegis")
         winreg.SetValueEx(k, "InstallLocation", 0, winreg.REG_SZ, install_dir)
-        winreg.SetValueEx(k, "UninstallString", 0, winreg.REG_SZ,
-                          f'"{exe_path}"')
+        winreg.SetValueEx(k, "UninstallString", 0, winreg.REG_SZ, f'"{exe_path}"')
         winreg.SetValueEx(k, "NoModify", 0, winreg.REG_DWORD, 1)
         winreg.SetValueEx(k, "NoRepair", 0, winreg.REG_DWORD, 1)
         winreg.CloseKey(k)
@@ -115,7 +100,6 @@ def reg_remove_uninstall():
 
 
 def create_shortcut(link_path, target, icon=None, workdir=None):
-    """Создаёт .lnk через PowerShell."""
     icon = icon or target
     workdir = workdir or os.path.dirname(target)
     ps = f"""
@@ -134,9 +118,6 @@ def create_shortcut(link_path, target, icon=None, workdir=None):
         return False
 
 
-# ============================================================
-#   ВИДЖЕТЫ
-# ============================================================
 class HoverButton(tk.Label):
     def __init__(self, parent, text, command, color=ACCENT, fg="#000",
                  pad=(22, 10), font=None):
@@ -151,11 +132,10 @@ class HoverButton(tk.Label):
 
 
 class CheckBox(tk.Frame):
-    """Кастомный чекбокс в стиле Aegis."""
     def __init__(self, parent, text, default=True, bg=CARD):
         super().__init__(parent, bg=bg)
         self.var = tk.BooleanVar(value=default)
-        self.box = tk.Label(self, text="✓" if default else "",
+        self.box = tk.Label(self, text="X" if default else "",
                             bg=ACCENT if default else CARD_HOV,
                             fg="#000" if default else SUB,
                             font=("Segoe UI Semibold", 11),
@@ -170,7 +150,7 @@ class CheckBox(tk.Frame):
     def _toggle(self, _):
         self.var.set(not self.var.get())
         if self.var.get():
-            self.box.config(text="✓", bg=ACCENT, fg="#000")
+            self.box.config(text="X", bg=ACCENT, fg="#000")
         else:
             self.box.config(text="", bg=CARD_HOV, fg=SUB)
 
@@ -178,18 +158,14 @@ class CheckBox(tk.Frame):
         return self.var.get()
 
 
-# ============================================================
-#   УСТАНОВЩИК
-# ============================================================
 class InstallerApp:
     def __init__(self, root):
         self.root = root
-        root.title(f"{APP_NAME} — установка")
+        root.title(f"{APP_NAME} - установка")
         root.geometry("640x540")
         root.configure(bg=BG)
         root.resizable(False, False)
 
-        # Иконка окна
         try:
             ip = resource_path("icon.ico")
             if os.path.exists(ip):
@@ -202,15 +178,13 @@ class InstallerApp:
         self.progress_val = 0
         self._build()
 
-    # ---------- UI ----------
     def _build(self):
-        # Шапка
         top = tk.Frame(self.root, bg=SIDEBAR, height=100)
         top.pack(fill="x"); top.pack_propagate(False)
 
         logo = tk.Frame(top, bg=SIDEBAR)
         logo.pack(side="left", padx=28, pady=20)
-        tk.Label(logo, text="◈", bg=SIDEBAR, fg=ACCENT,
+        tk.Label(logo, text="A", bg=SIDEBAR, fg=ACCENT,
                  font=("Segoe UI Semibold", 30)).pack(side="left")
         tbox = tk.Frame(logo, bg=SIDEBAR)
         tbox.pack(side="left", padx=(12, 0))
@@ -221,11 +195,9 @@ class InstallerApp:
 
         tk.Frame(self.root, bg=BORDER, height=1).pack(fill="x")
 
-        # Тело
         body = tk.Frame(self.root, bg=BG)
         body.pack(fill="both", expand=True, padx=28, pady=20)
 
-        # Папка установки
         tk.Label(body, text="Папка установки", bg=BG, fg=SUB,
                  font=("Segoe UI", 9)).pack(anchor="w")
         row = tk.Frame(body, bg=BG); row.pack(fill="x", pady=(6, 20))
@@ -239,10 +211,9 @@ class InstallerApp:
                                         initialdir=self.install_dir.get())
             if d:
                 self.install_dir.set(os.path.join(d, APP_NAME))
-        HoverButton(row, "Обзор…", browse, color=CARD_HOV, fg=FG,
+        HoverButton(row, "Обзор", browse, color=CARD_HOV, fg=FG,
                     pad=(14, 10)).pack(side="left", padx=(8, 0))
 
-        # Параметры
         tk.Label(body, text="Параметры", bg=BG, fg=SUB,
                  font=("Segoe UI", 9)).pack(anchor="w", pady=(0, 6))
         opts = tk.Frame(body, bg=CARD); opts.pack(fill="x", pady=(0, 20))
@@ -253,7 +224,6 @@ class InstallerApp:
         self.cb_run = CheckBox(opts, "Запустить после установки", True, bg=CARD)
         self.cb_run.pack(anchor="w", padx=18, pady=(0, 16))
 
-        # Прогресс + статус
         self.status_lbl = tk.Label(body, text="", bg=BG, fg=SUB,
                                    font=("Segoe UI", 9))
         self.status_lbl.pack(anchor="w")
@@ -262,7 +232,6 @@ class InstallerApp:
         self.progress.pack(fill="x", pady=(8, 0))
         self._draw_progress()
 
-        # Кнопки внизу
         bottom = tk.Frame(self.root, bg=BG)
         bottom.pack(fill="x", side="bottom")
         tk.Frame(bottom, bg=BORDER, height=1).pack(fill="x")
@@ -271,9 +240,9 @@ class InstallerApp:
         btn_row.pack(fill="x", padx=28, pady=18)
 
         if is_installed():
-            HoverButton(btn_row, "🗑  Удалить", self.do_uninstall,
+            HoverButton(btn_row, "Удалить", self.do_uninstall,
                         color=DANGER, fg="#fff").pack(side="left")
-            HoverButton(btn_row, "⟳  Переустановить", self.do_install,
+            HoverButton(btn_row, "Переустановить", self.do_install,
                         color=WARN, fg="#000").pack(side="left", padx=8)
         else:
             HoverButton(btn_row, "Установить", self.do_install).pack(side="right")
@@ -296,7 +265,6 @@ class InstallerApp:
             self.status_lbl.config(text=text)
         self.root.update_idletasks()
 
-    # ---------- УСТАНОВКА ----------
     def do_install(self):
         def worker():
             try:
@@ -306,51 +274,44 @@ class InstallerApp:
                         "Aegis", "Укажи папку установки."))
                     return
 
-                self.root.after(0, lambda: self._set_progress(10, "Создание папки…"))
+                self.root.after(0, lambda: self._set_progress(10, "Создание папки..."))
                 os.makedirs(target, exist_ok=True)
                 time.sleep(0.2)
 
-                # Копируем основной exe
-                self.root.after(0, lambda: self._set_progress(30, "Копирование программы…"))
+                self.root.after(0, lambda: self._set_progress(30, "Копирование программы..."))
                 src_exe = resource_path(EXE_NAME)
                 if not os.path.exists(src_exe):
                     self.root.after(0, lambda: messagebox.showerror(
                         "Aegis",
-                        f"Не найден {EXE_NAME}.\n"
-                        "Сначала собери основной .exe командой pyinstaller."))
+                        f"Не найден {EXE_NAME}.\nСначала собери основной .exe."))
                     return
                 dst_exe = os.path.join(target, EXE_NAME)
                 shutil.copy2(src_exe, dst_exe)
                 time.sleep(0.2)
 
-                # Иконка
-                self.root.after(0, lambda: self._set_progress(50, "Копирование иконки…"))
+                self.root.after(0, lambda: self._set_progress(50, "Копирование иконки..."))
                 src_icon = resource_path("icon.ico")
                 dst_icon = os.path.join(target, "icon.ico")
                 if os.path.exists(src_icon):
                     shutil.copy2(src_icon, dst_icon)
                 time.sleep(0.2)
 
-                # Автозагрузка
                 if self.cb_autostart.get():
-                    self.root.after(0, lambda: self._set_progress(65, "Добавление в автозагрузку…"))
+                    self.root.after(0, lambda: self._set_progress(65, "Автозагрузка..."))
                     reg_set_autostart(dst_exe)
                     time.sleep(0.2)
 
-                # Ярлык на рабочем столе
                 if self.cb_desktop.get():
-                    self.root.after(0, lambda: self._set_progress(78, "Создание ярлыка…"))
+                    self.root.after(0, lambda: self._set_progress(78, "Создание ярлыка..."))
                     desktop = os.path.join(os.path.expandvars(r'%USERPROFILE%'), 'Desktop')
                     create_shortcut(
                         os.path.join(desktop, f"{APP_NAME}.lnk"),
                         dst_exe, dst_icon, target)
                     time.sleep(0.2)
 
-                # Регистрация в «Установка и удаление программ»
-                self.root.after(0, lambda: self._set_progress(88, "Регистрация в системе…"))
+                self.root.after(0, lambda: self._set_progress(88, "Регистрация..."))
                 reg_write_uninstall(target, dst_exe)
 
-                # Ярлык в меню «Пуск»
                 start_menu = os.path.join(os.path.expandvars(r'%APPDATA%'),
                     r'Microsoft\Windows\Start Menu\Programs')
                 try:
@@ -363,7 +324,6 @@ class InstallerApp:
                 self.root.after(0, lambda: self._set_progress(100, "Готово."))
                 time.sleep(0.3)
 
-                # Запуск после установки
                 if self.cb_run.get():
                     try:
                         subprocess.Popen([dst_exe], cwd=target,
@@ -381,22 +341,21 @@ class InstallerApp:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    # ---------- УДАЛЕНИЕ ----------
     def do_uninstall(self):
         if not messagebox.askyesno("Aegis",
             "Удалить Aegis Cleaner?\n\n"
             "Программа, автозагрузка, ярлыки и запись в системе будут удалены.\n"
-            "Карантин в %LOCALAPPDATA%\\Aegis останется."):
+            "Карантин останется."):
             return
 
         def worker():
             try:
                 target = self.install_dir.get().strip()
-                self.root.after(0, lambda: self._set_progress(20, "Удаление автозагрузки…"))
+                self.root.after(0, lambda: self._set_progress(20, "Автозагрузка..."))
                 reg_remove_autostart()
                 time.sleep(0.2)
 
-                self.root.after(0, lambda: self._set_progress(45, "Удаление ярлыков…"))
+                self.root.after(0, lambda: self._set_progress(45, "Ярлыки..."))
                 desktop = os.path.join(os.path.expandvars(r'%USERPROFILE%'), 'Desktop')
                 for p in [
                     os.path.join(desktop, f"{APP_NAME}.lnk"),
@@ -410,11 +369,11 @@ class InstallerApp:
                         pass
                 time.sleep(0.2)
 
-                self.root.after(0, lambda: self._set_progress(65, "Удаление из системы…"))
+                self.root.after(0, lambda: self._set_progress(65, "Регистрация..."))
                 reg_remove_uninstall()
                 time.sleep(0.2)
 
-                self.root.after(0, lambda: self._set_progress(85, "Удаление файлов…"))
+                self.root.after(0, lambda: self._set_progress(85, "Файлы..."))
                 if os.path.isdir(target):
                     try:
                         shutil.rmtree(target)
@@ -432,9 +391,6 @@ class InstallerApp:
         threading.Thread(target=worker, daemon=True).start()
 
 
-# ============================================================
-#   ЗАПУСК
-# ============================================================
 if __name__ == "__main__":
     root = tk.Tk()
     InstallerApp(root)
